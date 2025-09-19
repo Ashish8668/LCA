@@ -160,24 +160,24 @@ def predict():
 
         # 2. Pie Chart (Reuse vs Recycle vs End of Life)
         fig, ax = plt.subplots()
-        values = [output["Reuse_%"], output["Recycle_%"], output["End_of_Life_Score"] * 100]
+        values = [output["Reuse_%"], output["Recycle_%"], output["End_of_Life_Score"]]
         labels = ["Reuse %", "Recycle %", "End of Life %"]
         ax.pie(values, labels=labels, autopct='%1.1f%%')
         ax.set_title("Circular Economy Breakdown")
         charts["pie"] = create_base64_plot(fig)
 
-        # 3. Line Chart (trend of impacts)
-        fig, ax = plt.subplots()
-        impacts = ["Carbon", "Water", "Energy", "Land"]
-        values = [
-            output["Carbon_Footprint_kgCO2"],
-            output["Water_Use_m3"],
-            output["Energy_Intensity_MJ"],
-            output["Land_Disturbance_m2"]
-        ]
-        ax.plot(impacts, values, marker="o")
-        ax.set_title("Impact Trend")
-        charts["line"] = create_base64_plot(fig)
+        # # 3. Line Chart (trend of impacts)
+        # fig, ax = plt.subplots()
+        # impacts = ["Carbon", "Water", "Energy", "Land"]
+        # values = [
+        #     output["Carbon_Footprint_kgCO2"],
+        #     output["Water_Use_m3"],
+        #     output["Energy_Intensity_MJ"],
+        #     output["Land_Disturbance_m2"]
+        # ]
+        # ax.plot(impacts, values, marker="o")
+        # ax.set_title("Impact Trend")
+        # charts["line"] = create_base64_plot(fig)
 
         # 4. Radar Chart (Spider Plot)
         categories = ["Carbon", "Water", "Energy", "Land", "Reuse", "Recycle"]
@@ -211,21 +211,21 @@ def predict():
         ax.set_title("Reuse vs Recycle vs Waste")
         charts["stacked"] = create_base64_plot(fig)
 
-        # 6. Heatmap (correlation of impacts)
-        data = pd.DataFrame({
-            "Carbon": [output["Carbon_Footprint_kgCO2"]],
-            "Water": [output["Water_Use_m3"]],
-            "Energy": [output["Energy_Intensity_MJ"]],
-            "Land": [output["Land_Disturbance_m2"]],
-            "Reuse": [output["Reuse_%"]],
-            "Recycle": [output["Recycle_%"]],
-            "EndLife": [output["End_of_Life_Score"]]
-        })
-        corr = data.corr()
-        fig, ax = plt.subplots()
-        sns.heatmap(corr, annot=True, cmap="Blues", ax=ax)
-        ax.set_title("Impact Correlation Heatmap")
-        charts["heatmap"] = create_base64_plot(fig)
+        # # 6. Heatmap (correlation of impacts)
+        # data = pd.DataFrame({
+        #     "Carbon": [output["Carbon_Footprint_kgCO2"]],
+        #     "Water": [output["Water_Use_m3"]],
+        #     "Energy": [output["Energy_Intensity_MJ"]],
+        #     "Land": [output["Land_Disturbance_m2"]],
+        #     "Reuse": [output["Reuse_%"]],
+        #     "Recycle": [output["Recycle_%"]],
+        #     "EndLife": [output["End_of_Life_Score"]]
+        # })
+        # corr = data.corr()
+        # fig, ax = plt.subplots()
+        # sns.heatmap(corr, annot=True, cmap="Blues", ax=ax)
+        # ax.set_title("Impact Correlation Heatmap")
+        # charts["heatmap"] = create_base64_plot(fig)
 
         # Gemini Recommendations
         try:
