@@ -103,13 +103,26 @@
   </div>
   {% endif %}
 
-  <!-- Optional Gemini Chat Section -->
-  <div class="bg-white p-4 rounded-2xl shadow-sm mt-6">
-    <h3 class="text-lg font-semibold">Chatbot Assistant</h3>
-    <div id="chatbox" class="h-48 overflow-y-auto border p-2 mb-2 bg-gray-50"></div>
-    <input type="text" id="userInput" placeholder="Ask a question..." class="w-3/4 p-2 border rounded"/>
-    <button onclick="sendMessage()" class="p-2 bg-indigo-600 text-white rounded">Send</button>
+ 
+<!-- Gemini Recommendations after prediction -->
+{% if recommendations %}
+<div class="bg-green-50 p-4 rounded-2xl shadow-sm mt-4">
+  <h3 class="text-lg font-semibold text-green-800">AI Recommendations</h3>
+  <p class="text-sm text-gray-700 whitespace-pre-line">{{ recommendations }}</p>
+</div>
+{% endif %}
+
+<!-- Chatbot Section -->
+<div class="bg-white p-4 rounded-2xl shadow-sm mt-6">
+  <h3 class="text-lg font-semibold">Chatbot Assistant</h3>
+  <div id="chatbox" class="h-48 overflow-y-auto border p-2 mb-2 bg-gray-50">
+    {% if recommendations %}
+      <p><b>Bot:</b> {{ recommendations }}</p>
+    {% endif %}
   </div>
+  <input type="text" id="userInput" placeholder="Ask a question..." class="w-3/4 p-2 border rounded"/>
+  <button onclick="sendMessage()" class="p-2 bg-indigo-600 text-white rounded">Send</button>
+</div>
 
 </main>
 

@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify
 import pickle
 import numpy as np
-import os
 import google.generativeai as genai
+import os
 from dotenv import load_dotenv
-
+# Configure Gemini API
 load_dotenv()
 gemini_api_key = os.getenv("API_KEY")
 genai.configure(api_key=gemini_api_key)
@@ -17,7 +17,7 @@ model = pickle.load(open("model/model.pkl", "rb"))
 scaler = pickle.load(open("model/scaler.pkl", "rb"))
 encoders = pickle.load(open("model/encoders.pkl", "rb"))
 
-# Function to safely encode unseen categories
+# Safe encoder function
 def safe_encode(encoder, value):
     if value in encoder.classes_:
         return encoder.transform([value])[0]
@@ -38,10 +38,8 @@ def chat_gemini():
         return jsonify({"answer": "Please enter a valid question."})
 
     try:
-        # Initialize Gemini model
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        # Generate response
-        response = model.generate_content(query)
+        model_gemini = genai.GenerativeModel("gemini-1.5-flash")
+        response = model_gemini.generate_content(query)
         return jsonify({"answer": response.text})
     except Exception as e:
         return jsonify({"answer": f"Error: {str(e)}"})
@@ -49,7 +47,7 @@ def chat_gemini():
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        # Input values from form
+        # Input values
         Material = request.form["Material"]
         Source = float(request.form["Source_%"])
         Quantity = float(request.form["Quantity_tons"])
@@ -59,20 +57,17 @@ def predict():
         Distance = float(request.form["Distance_km"])
         SmeltingEff = float(request.form["Smelting_Efficiency_%"])
 
-        # Encode categorical features safely
-        Material = safe_encode(encoders["Metal"], Material)
-        TransportMode = safe_encode(encoders["Transport_Mode"], TransportMode)
+        # Encode categorical
+        Material_enc = safe_encode(encoders["Metal"], Material)
+        Transport_enc = safe_encode(encoders["Transport_Mode"], TransportMode)
 
-        # Feature vector in same order as training
-        features = np.array([[Material, Source, Quantity, Ore_Grade, Energy,
-                              TransportMode, Distance, SmeltingEff]])
-
-        # Scale features
+        # Features
+        features = np.array([[Material_enc, Source, Quantity, Ore_Grade, Energy,
+                              Transport_enc, Distance, SmeltingEff]])
         features_scaled = scaler.transform(features)
 
-        # Predict
+        # ML Prediction
         preds = model.predict(features_scaled)[0]
-
         output = {
             "Carbon_Footprint_kgCO2": round(preds[0], 2),
             "Water_Use_m3": round(preds[1], 2),
@@ -84,7 +79,26 @@ def predict():
             "End_of_Life_Score": round(preds[7], 2)
         }
 
-        return render_template("index.html", prediction=output)
+        # Gemini Recommendations
+        try:
+            context = f"""
+            Inputs:
+            Material = {Material}, Source% = {Source}, Quantity = {Quantity} tons, 
+            Ore Grade = {Ore_Grade}%, Energy = {Energy}%, Transport Mode = {TransportMode}, Distance = {Distance} km,
+            Smelting Efficiency = {SmeltingEff}%
+
+            Outputs (ML Predictions):
+            {output}
+
+            Task: Give exactly 2 practical recommendations to improve circularity across full value chain.
+            """
+            model_gemini = genai.GenerativeModel("gemini-1.5-flash")
+            rec_response = model_gemini.generate_content(context)
+            recommendations = rec_response.text.strip()
+        except Exception as e:
+            recommendations = f"Could not fetch recommendations: {str(e)}"
+
+        return render_template("index.html", prediction=output, recommendations=recommendations)
 
     except Exception as e:
         return jsonify({"error": str(e)})
