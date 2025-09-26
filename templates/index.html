@@ -155,6 +155,74 @@
       </script>
       {% endif %}
 
+
+      <!-- Comparative Dashboard -->
+      {% if comparisons %}
+      <div class="bg-white p-6 rounded-2xl shadow-sm mt-8">
+        <h3 class="text-xl font-semibold mb-4 text-center">Comparative Dashboard</h3>
+
+        <!-- Bar Chart: Linear vs Circular -->
+        <div class="bg-gray-50 p-4 rounded-lg mb-6">
+          <h4 class="text-md font-semibold mb-2">Environmental Impacts</h4>
+          <div id="comparison-bar" class="w-full h-96"></div>
+        </div>
+
+        <!-- Pie Charts Side by Side -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <h4 class="text-md font-semibold mb-2">Linear Flow</h4>
+            <div id="linear-pie" class="w-full h-80"></div>
+          </div>
+          <div class="bg-gray-50 p-4 rounded-lg">
+            <h4 class="text-md font-semibold mb-2">Circular Flow</h4>
+            <div id="circular-pie" class="w-full h-80"></div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        var comparisonData = {{ comparisons | tojson }};
+
+        // Bar chart (side by side comparison)
+        var barTraceLinear = {
+          x: Object.keys(comparisonData.linear),
+          y: Object.values(comparisonData.linear),
+          name: "Linear",
+          type: "bar",
+          marker: { color: 'rgb(244, 67, 54)' }
+        };
+
+        var barTraceCircular = {
+          x: Object.keys(comparisonData.circular),
+          y: Object.values(comparisonData.circular),
+          name: "Circular",
+          type: "bar",
+          marker: { color: 'rgb(76, 175, 80)' }
+        };
+
+        Plotly.newPlot("comparison-bar", [barTraceLinear, barTraceCircular], {
+          barmode: "group",
+          margin: { t: 40 },
+          title: "Linear vs Circular - Key Metrics"
+        });
+
+        // Pie charts
+        Plotly.newPlot("linear-pie", [{
+          labels: Object.keys(comparisonData.linear),
+          values: Object.values(comparisonData.linear),
+          type: "pie",
+          marker: { colors: ['#f87171', '#fb923c', '#facc15', '#60a5fa', '#34d399'] }
+        }], { title: "Linear Distribution" });
+
+        Plotly.newPlot("circular-pie", [{
+          labels: Object.keys(comparisonData.circular),
+          values: Object.values(comparisonData.circular),
+          type: "pie",
+          marker: { colors: ['#22c55e', '#10b981', '#14b8a6', '#3b82f6', '#6366f1'] }
+        }], { title: "Circular Distribution" });
+      </script>
+      {% endif %}
+
       {% if recommendations %}
       <div class="bg-green-50 p-4 rounded-2xl shadow-sm mt-4">
         <h3 class="text-lg font-semibold text-green-800">AI Recommendations</h3>
@@ -173,6 +241,46 @@
         <input type="text" id="userInput" placeholder="Ask a question..." class="w-3/4 p-2 border rounded" />
         <button onclick="sendMessage()" class="p-2 bg-indigo-600 text-white rounded">Send</button>
       </div>
+
+      <!-- Export PDF Button -->
+      <button onclick="exportPDF()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+        Export PDF
+      </button>
+
+      <script>
+        async function exportPDF() {
+          // Safely pass variables from Jinja to JavaScript
+          let payload = {
+            inputs: {{ inputs | tojson if inputs else 'null' }},
+            linear: {{ linear | tojson if linear else 'null' }},
+            circular: {{ circular | tojson if circular else 'null' }},
+            charts: {{ charts | tojson if charts else '{}' }},
+            sankeys: {{ sankeys | tojson if sankeys else '{}' }},
+            recommendations: {{ recommendations | tojson if recommendations else 'null' }}
+          };
+
+          let res = await fetch("/export_pdf", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            alert("Failed to export PDF.");
+            return;
+          }
+
+          let blob = await res.blob();
+          let url = window.URL.createObjectURL(blob);
+          let a = document.createElement("a");
+          a.href = url;
+          a.download = "circularity_report.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+        }
+      </script>
 
       <script>
         async function sendMessage() {
@@ -193,13 +301,6 @@
           document.getElementById("userInput").value = "";
         }
       </script>
-
-      <!-- Action Buttons -->
-      <div class="flex gap-4 justify-center mt-6">
-        <a href="/scenario" class="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition">Scenario Simulator</a>
-        <a href="/compare" class="px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition">Comparison Dashboard</a>
-        <a href="/export_pdf" class="px-6 py-3 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition">Export as PDF</a>
-      </div>
 
     </main>
   </div>
