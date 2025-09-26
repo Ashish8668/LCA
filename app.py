@@ -1,33 +1,31 @@
 from flask import Flask, render_template, request, jsonify
 import pickle
 import numpy as np
-import pandas as pd
-import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-import io 
-import base64 
-
-import matplotlib 
-matplotlib.use('Agg') 
-import matplotlib.pyplot as plt  
-import seaborn as sns 
-sns.set_theme(style="whitegrid") 
+import io
+import base64
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set_theme(style="whitegrid")
+import google.generativeai as genai
+import json
+import plotly.graph_objects as go
 
 # Configure Gemini API
 load_dotenv()
 gemini_api_key = os.getenv("API_KEY")
 genai.configure(api_key=gemini_api_key)
 
-# Flask app
 app = Flask(__name__)
 
-# Load saved model, scaler, encoders
+# Load model, scaler, encoders
 model = pickle.load(open("model/model.pkl", "rb"))
 scaler = pickle.load(open("model/scaler.pkl", "rb"))
 encoders = pickle.load(open("model/encoders.pkl", "rb"))
 
-# Safe encoder function
 def safe_encode(encoder, value):
     if value in encoder.classes_:
         return encoder.transform([value])[0]
@@ -35,24 +33,31 @@ def safe_encode(encoder, value):
         encoder.classes_ = np.append(encoder.classes_, value)
         return encoder.transform([value])[0]
 
+def create_base64_plot(fig):
+    """Convert Matplotlib figure to base64"""
+    img = io.BytesIO()
+    fig.savefig(img, format='png', bbox_inches='tight')
+    img.seek(0)
+    plot_url = base64.b64encode(img.getvalue()).decode("utf8")
+    plt.close(fig)
+    return plot_url
+
 @app.route("/")
 def home():
     return render_template(
         "index.html",
-        prediction=None,      # no predictions yet
-        recommendations=None, # no Gemini output yet
-        charts={},            # empty dict for charts
-        inputs={}             # empty dict for input form
+        prediction=None,
+        recommendations=None,
+        charts={},
+        sankeys={}
     )
 
 @app.route("/chat_gemini", methods=["POST"])
 def chat_gemini():
     data = request.get_json()
     query = data.get("query", "").strip()
-
     if not query:
         return jsonify({"answer": "Please enter a valid question."})
-
     try:
         model_gemini = genai.GenerativeModel("gemini-1.5-flash")
         response = model_gemini.generate_content(query)
@@ -60,30 +65,10 @@ def chat_gemini():
     except Exception as e:
         return jsonify({"answer": f"Error: {str(e)}"})
 
-
-# ---------- Helper to convert plot to base64 ----------
-def fig_to_base64(fig):
-    buf = io.BytesIO()
-    fig.tight_layout()
-    fig.savefig(buf, format='png', bbox_inches='tight')
-    buf.seek(0)
-    data = base64.b64encode(buf.getvalue()).decode('ascii')
-    plt.close(fig)
-    return data
-
-def create_base64_plot(fig):
-    """Convert Matplotlib fig to base64 string for embedding in HTML"""
-    img = io.BytesIO()
-    fig.savefig(img, format="png", bbox_inches="tight")
-    img.seek(0)
-    plot_url = base64.b64encode(img.getvalue()).decode("utf8")
-    plt.close(fig)
-    return plot_url
-
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
-        # Input values
+        # Inputs
         Material = request.form["Material"]
         Source = float(request.form["Source_%"])
         Quantity = float(request.form["Quantity_tons"])
@@ -102,21 +87,8 @@ def predict():
                               Transport_enc, Distance, SmeltingEff]])
         features_scaled = scaler.transform(features)
 
-        # ML Prediction
-        # preds = model.predict(features_scaled)[0]
-        # output = {
-        #     "Carbon_Footprint_kgCO2": round(preds[0], 2),
-        #     "Water_Use_m3": round(preds[1], 2),
-        #     "Energy_Intensity_MJ": round(preds[2], 2),
-        #     "Land_Disturbance_m2": round(preds[3], 2),
-        #     "Reuse_%": round(preds[4], 2),
-        #     "Recycle_%": round(preds[5], 2),
-        #     "Global_Warming_Potential": round(preds[6], 2),
-        #     "End_of_Life_Score": round(preds[7], 2)
-        # }
-
+        # Prediction
         if model is None:
-            # fallback/static output
             output = {
                 "Carbon_Footprint_kgCO2": 120.0,
                 "Water_Use_m3": 30.0,
@@ -128,7 +100,6 @@ def predict():
                 "End_of_Life_Score": 90.0
             }
         else:
-            # ML Prediction
             preds = model.predict(features_scaled)[0]
             output = {
                 "Carbon_Footprint_kgCO2": round(preds[0], 2),
@@ -140,98 +111,86 @@ def predict():
                 "Global_Warming_Potential": round(preds[6], 2),
                 "End_of_Life_Score": round(preds[7], 2)
             }
-        
+
+        # ---------- Charts ----------
         charts = {}
 
-        # 1. Bar Chart
-        fig, ax = plt.subplots()
-        sns.barplot(
-            x=["Carbon", "Water", "Energy", "Land"],
-            y=[
-                output["Carbon_Footprint_kgCO2"],
-                output["Water_Use_m3"],
-                output["Energy_Intensity_MJ"],
-                output["Land_Disturbance_m2"]
-            ],
-            ax=ax
-        )
-        ax.set_title("Impact Distribution")
-        charts["bar"] = create_base64_plot(fig)
-
-        # 2. Pie Chart (Reuse vs Recycle vs End of Life)
-        fig, ax = plt.subplots()
-        values = [output["Reuse_%"], output["Recycle_%"], output["End_of_Life_Score"]]
-        labels = ["Reuse %", "Recycle %", "End of Life %"]
-        ax.pie(values, labels=labels, autopct='%1.1f%%')
-        ax.set_title("Circular Economy Breakdown")
-        charts["pie"] = create_base64_plot(fig)
-
-        # # 3. Line Chart (trend of impacts)
-        # fig, ax = plt.subplots()
-        # impacts = ["Carbon", "Water", "Energy", "Land"]
-        # values = [
-        #     output["Carbon_Footprint_kgCO2"],
-        #     output["Water_Use_m3"],
-        #     output["Energy_Intensity_MJ"],
-        #     output["Land_Disturbance_m2"]
-        # ]
-        # ax.plot(impacts, values, marker="o")
-        # ax.set_title("Impact Trend")
-        # charts["line"] = create_base64_plot(fig)
-
-        # 4. Radar Chart (Spider Plot)
-        categories = ["Carbon", "Water", "Energy", "Land", "Reuse", "Recycle"]
+        # Radar Chart in %
+        max_vals = {
+            "Carbon_Footprint_kgCO2": 500,
+            "Water_Use_m3": 100,
+            "Energy_Intensity_MJ": 2000,
+            "Land_Disturbance_m2": 500,
+            "Reuse_%": 100,
+            "Recycle_%": 100,
+            "End_of_Life_Score": 100
+        }
+        categories = ["Carbon", "Water", "Energy", "Land", "Reuse", "Recycle", "End of Life"]
         values = [
-            output["Carbon_Footprint_kgCO2"] / 10,  # scaled for visualization
-            output["Water_Use_m3"],
-            output["Energy_Intensity_MJ"] / 20,
-            output["Land_Disturbance_m2"] / 5,
-            output["Reuse_%"],
-            output["Recycle_%"]
+            output["Carbon_Footprint_kgCO2"]/max_vals["Carbon_Footprint_kgCO2"]*100,
+            output["Water_Use_m3"]/max_vals["Water_Use_m3"]*100,
+            output["Energy_Intensity_MJ"]/max_vals["Energy_Intensity_MJ"]*100,
+            output["Land_Disturbance_m2"]/max_vals["Land_Disturbance_m2"]*100,
+            output["Reuse_%"]/max_vals["Reuse_%"]*100,
+            output["Recycle_%"]/max_vals["Recycle_%"]*100,
+            output["End_of_Life_Score"]/max_vals["End_of_Life_Score"]*100
         ]
-        values += values[:1]  # close loop
-        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+        values += values[:1]
+        angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False).tolist()
         angles += angles[:1]
         fig, ax = plt.subplots(subplot_kw=dict(polar=True))
         ax.plot(angles, values, "o-", linewidth=2)
         ax.fill(angles, values, alpha=0.25)
         ax.set_thetagrids(np.degrees(angles[:-1]), categories)
-        ax.set_title("Radar Chart of Impacts")
+        ax.set_title("Radar Chart of Impacts (%)")
         charts["radar"] = create_base64_plot(fig)
 
-        # 5. Stacked Bar Chart
+        # Pie Chart
         fig, ax = plt.subplots()
         reuse = output["Reuse_%"]
         recycle = output["Recycle_%"]
         waste = 100 - reuse - recycle
-        ax.bar("Lifecycle", reuse, label="Reuse %")
-        ax.bar("Lifecycle", recycle, bottom=reuse, label="Recycle %")
-        ax.bar("Lifecycle", waste, bottom=reuse+recycle, label="Waste %")
-        ax.legend()
-        ax.set_title("Reuse vs Recycle vs Waste")
-        charts["stacked"] = create_base64_plot(fig)
+        ax.pie([reuse, recycle, waste], labels=["Reuse %", "Recycle %", "Waste %"],
+               autopct='%1.1f%%', colors=["#4CAF50","#2196F3","#F44336"])
+        ax.set_title("Circularity Breakdown")
+        charts["pie_waste"] = create_base64_plot(fig)
 
-        # # 6. Heatmap (correlation of impacts)
-        # data = pd.DataFrame({
-        #     "Carbon": [output["Carbon_Footprint_kgCO2"]],
-        #     "Water": [output["Water_Use_m3"]],
-        #     "Energy": [output["Energy_Intensity_MJ"]],
-        #     "Land": [output["Land_Disturbance_m2"]],
-        #     "Reuse": [output["Reuse_%"]],
-        #     "Recycle": [output["Recycle_%"]],
-        #     "EndLife": [output["End_of_Life_Score"]]
-        # })
-        # corr = data.corr()
-        # fig, ax = plt.subplots()
-        # sns.heatmap(corr, annot=True, cmap="Blues", ax=ax)
-        # ax.set_title("Impact Correlation Heatmap")
-        # charts["heatmap"] = create_base64_plot(fig)
+        # Sankey JSON
+        sankeys = {}
+        material_labels = ["Metal Source", "Processing", "Transport", "Product", "Reuse", "Recycle", "Waste"]
+        material_sources = [0,1,2,3,3,3]
+        material_targets = [1,2,3,4,5,6]
+        material_values = [Quantity, Quantity, Quantity, reuse, recycle, waste]
+
+        energy_labels = ["Grid Mix", "Processing", "Carbon", "Water", "Energy", "Land"]
+        energy_sources = [0,1,1,1,1]
+        energy_targets = [1,2,3,4,5]
+        energy_values = [
+            Energy,
+            output["Carbon_Footprint_kgCO2"],
+            output["Water_Use_m3"],
+            output["Energy_Intensity_MJ"],
+            output["Land_Disturbance_m2"]
+        ]
+        sankeys["material"] = {
+            "labels": material_labels,
+            "sources": material_sources,
+            "targets": material_targets,
+            "values": material_values
+        }
+
+        sankeys["energy"] = {
+            "labels": energy_labels,
+            "sources": energy_sources,
+            "targets": energy_targets,
+            "values": energy_values
+        }
 
         # Gemini Recommendations
         try:
             context = f"""
             Inputs:
-            Material = {Material}, Source% = {Source}, Quantity = {Quantity} tons, 
+            Material = {Material}, Source% = {Source}, Quantity = {Quantity} tons,
             Ore Grade = {Ore_Grade}%, Energy = {Energy}%, Transport Mode = {TransportMode}, Distance = {Distance} km,
             Smelting Efficiency = {SmeltingEff}%
 
@@ -246,11 +205,14 @@ def predict():
         except Exception as e:
             recommendations = f"Could not fetch recommendations: {str(e)}"
 
-        inputs = request.form
-        return render_template("index.html", 
-                               prediction=output, recommendations=recommendations,
-                               charts=charts,
-                               inputs=inputs)
+        return render_template(
+            "index.html",
+            prediction=output,
+            recommendations=recommendations,
+            charts=charts,
+            sankeys=sankeys,
+            inputs=request.form
+        )
 
     except Exception as e:
         return jsonify({"error": str(e)})

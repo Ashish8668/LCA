@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <title>Circularity Cockpit - LCA</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 
 <body class="min-h-screen bg-gray-50 text-gray-900">
@@ -60,7 +61,8 @@
       </div>
     </aside>
 
-    <!-- Add this inside your Main Results section (col-span-9) -->
+
+    <!-- Main Content -->
     <main class="col-span-9 space-y-4">
 
       {% if prediction %}
@@ -105,8 +107,54 @@
       </div>
       {% endif %}
 
+      <!-- Sankey Diagrams -->
+      {% if sankeys %}
+      <div class="grid grid-cols-1 gap-4 mt-6">
+        <div class="bg-white p-4 rounded-2xl shadow-sm">
+          <h3 class="text-lg font-semibold mb-2">Material Flow Sankey</h3>
+          <div id="material-sankey" class="w-full h-96 max-w-full mx-auto"></div>
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm">
+          <h3 class="text-lg font-semibold mb-2">Energy & Emission Sankey</h3>
+          <div id="energy-sankey" class="w-full h-96 max-w-full mx-auto"></div>
+        </div>
+      </div>
 
-      <!-- Gemini Recommendations after prediction -->
+      <!-- Charts -->
+      {% if charts %}
+      <div class="grid grid-cols-2 gap-4 mt-6">
+        <div class="bg-white p-4 rounded-2xl shadow-sm">
+          <h3 class="text-lg font-semibold mb-2">Radar Chart of Impacts (%)</h3>
+          <img src="data:image/png;base64,{{ charts['radar'] }}" class="w-full max-w-xs h-auto mx-auto" />
+        </div>
+        <div class="bg-white p-4 rounded-2xl shadow-sm">
+          <h3 class="text-lg font-semibold mb-2">Reuse vs Recycle vs Waste</h3>
+          <img src="data:image/png;base64,{{ charts['pie_waste'] }}" class="w-full max-w-xs h-auto mx-auto" />
+        </div>
+      </div>
+      {% endif %}
+
+
+      <script>
+        var materialData = {{ sankeys['material'] | tojson }};
+        var energyData = {{ sankeys['energy'] | tojson }};
+
+        Plotly.newPlot('material-sankey', [{
+          type: "sankey",
+          orientation: "h",
+          node: { label: materialData.labels },
+          link: { source: materialData.sources, target: materialData.targets, value: materialData.values }
+        }]);
+
+        Plotly.newPlot('energy-sankey', [{
+          type: "sankey",
+          orientation: "h",
+          node: { label: energyData.labels },
+          link: { source: energyData.sources, target: energyData.targets, value: energyData.values }
+        }]);
+      </script>
+      {% endif %}
+
       {% if recommendations %}
       <div class="bg-green-50 p-4 rounded-2xl shadow-sm mt-4">
         <h3 class="text-lg font-semibold text-green-800">AI Recommendations</h3>
@@ -126,38 +174,34 @@
         <button onclick="sendMessage()" class="p-2 bg-indigo-600 text-white rounded">Send</button>
       </div>
 
-      <div class="grid grid-cols-2 gap-4 mt-4">
-        {% for name, chart in charts.items() %}
-        <div class="bg-white p-4 rounded shadow">
-          <h3 class="font-medium mb-2">{{ name|capitalize }} Chart</h3>
-          <img src="data:image/png;base64,{{ chart }}" class="w-full rounded" alt="{{ name }} chart" />
-        </div>
-        {% endfor %}
+      <script>
+        async function sendMessage() {
+          let input = document.getElementById("userInput").value;
+          if (!input.trim()) return;
+
+          let chatbox = document.getElementById("chatbox");
+          chatbox.innerHTML += `<p><b>You:</b> ${input}</p>`;
+
+          let res = await fetch("/chat_gemini", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: input })
+          });
+          let data = await res.json();
+          chatbox.innerHTML += `<p><b>Bot:</b> ${data.answer}</p>`;
+          chatbox.scrollTop = chatbox.scrollHeight;
+          document.getElementById("userInput").value = "";
+        }
+      </script>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-4 justify-center mt-6">
+        <a href="/scenario" class="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 transition">Scenario Simulator</a>
+        <a href="/compare" class="px-6 py-3 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 transition">Comparison Dashboard</a>
+        <a href="/export_pdf" class="px-6 py-3 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition">Export as PDF</a>
       </div>
 
     </main>
-
-    <script>
-      async function sendMessage() {
-        let input = document.getElementById("userInput").value;
-        if (!input.trim()) return;
-
-        let chatbox = document.getElementById("chatbox");
-        chatbox.innerHTML += `<p><b>You:</b> ${input}</p>`;
-
-        let res = await fetch("/chat_gemini", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: input })
-        });
-        let data = await res.json();
-        chatbox.innerHTML += `<p><b>Bot:</b> ${data.answer}</p>`;
-        chatbox.scrollTop = chatbox.scrollHeight;
-        document.getElementById("userInput").value = "";
-      }
-    </script>
-
-
   </div>
 
 </body>
